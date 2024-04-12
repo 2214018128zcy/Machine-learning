@@ -3,6 +3,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+
 
 
 # 定义数据预处理
@@ -48,39 +52,79 @@ model = CustomModel()  # 创建自定义模型实例
 criterion = nn.CrossEntropyLoss()  # 交叉熵损失函数
 optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adam优化器
 
+def test(model, test_loader):
+    model.eval()
+    correct = 0
+    total = 0
+    predicted_labels = []
+    with torch.no_grad():
+        for images, labels in test_loader:
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            predicted_labels.extend(predicted.tolist())  # Collect predicted labels
+    accuracy = correct / total
+    return accuracy, predicted_labels
+
 def train(model, train_loader, criterion, optimizer, num_epochs):
-    model.train()  # 设置模型为训练模式
+    model.train()
+    train_losses = []
+    test_accuracies = []
+
     for epoch in range(num_epochs):
         running_loss = 0.0
         for i, (images, labels) in enumerate(train_loader):
-            optimizer.zero_grad()  # 梯度清零
-            outputs = model(images)  # 前向传播
-            loss = criterion(outputs, labels)  # 计算损失
-            loss.backward()  # 反向传播，计算梯度
-            optimizer.step()  # 更新参数
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
             running_loss += loss.item()
             if (i + 1) % 100 == 0:
-                print(
-                    f"Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{len(train_loader)}], Loss: {running_loss / 100:.4f}")
+                print(f"Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{len(train_loader)}], Loss: {running_loss / 100:.4f}")
                 running_loss = 0.0
 
-        accuracy = test(model, test_loader)  # 在测试集上评估模型准确率
+        accuracy, _ = test(model, test_loader)
         print(f"Epoch [{epoch + 1}/{num_epochs}], Accuracy on test set: {accuracy:.4f}")
 
+        train_losses.append(running_loss / len(train_loader))
+        test_accuracies.append(accuracy)
 
-def test(model, test_loader):
-    model.eval()  # 设置模型为评估模式
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in test_loader:
-            outputs = model(images)  # 前向传播
-            _,predicted = torch.max(outputs.data, 1)  # 获取预测结果
-            total += labels.size(0)  # 累计样本数量
-            correct += (predicted == labels).sum().item()  # 统计正确预测的数量
-    accuracy = correct / total  # 计算准确率
-    return accuracy
+    # Plot loss curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(range(1, num_epochs + 1), train_losses, label='Train Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss')
+    plt.legend()
+    plt.show()
+
+    # Plot accuracy curve
+    plt.figure(figsize=(8, 6))
+    plt.plot(range(1, num_epochs + 1), test_accuracies, label='Test Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.title('Test Accuracy')
+    plt.legend()
+    plt.show()
+
+    # Calculate confusion matrix and plot
+    _, predicted_labels = test(model, test_loader)
+    true_labels = test_dataset.targets
+    confusion_mat = confusion_matrix(true_labels, predicted_labels)
+
+    plt.figure(figsize=(8, 6))
+    plt.imshow(confusion_mat, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix")
+    plt.colorbar()
+    tick_marks = np.arange(10)
+    plt.xticks(tick_marks, tick_marks)
+    plt.yticks(tick_marks, tick_marks)
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+    plt.show()
 
 num_epochs = 10
 train(model, train_loader, criterion, optimizer, num_epochs)  # 开始训练
